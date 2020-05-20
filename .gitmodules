@@ -1,0 +1,4 @@
+[submodule "AngularPropagateTensorflow"]
+	path = AngularPropagateTensorflow
+	url = https://github.com/JamesWhitehead5/AngularPropagateTensorflow.git
+	branch = master
