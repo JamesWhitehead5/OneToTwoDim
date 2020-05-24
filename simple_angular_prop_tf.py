@@ -21,20 +21,6 @@ field_initializer_random = lambda:  np.sqrt(np.random.rand(*slm_shape))*np.exp(1
 field_initializer_uniform = lambda: np.ones(slm_shape, dtype=np.complex128)
 
 
-@tf.function
-def loss():
-    complex_e_field = tf.dtypes.complex(e_field_real, e_field_imag)
-    resultant_field = ap_tf.propagate_angular_padded(field=complex_e_field, k=k, z_list=[target_focal_length, ], dx=dd, dy=dd)[0, :, :]
-    intensity = tf.abs(resultant_field)**2
-    return -intensity[slm_n//2, slm_n//2]
-
-# Set up logging.
-# stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-# logdir = 'logs\\simple_angular_prop_tf\\%s' % stamp
-# writer = tf.summary.create_file_writer(logdir)
-# tf.summary.trace_on(graph=True, profiler=True)
-
-
 # define a target intensity with a maximum in the center
 def generate_2d_gaussian():
     sigma = wavelength*20.
@@ -48,6 +34,14 @@ def generate_center_point():
     field = np.zeros(shape=slm_shape)
     field[slm_shape[0]//2, slm_shape[1]//2] = 1.
     return field
+
+
+@tf.function
+def loss():
+    complex_e_field = tf.dtypes.complex(e_field_real, e_field_imag)
+    resultant_field = ap_tf.propagate_angular_padded(field=complex_e_field, k=k, z_list=[target_focal_length, ], dx=dd, dy=dd)[0, :, :]
+    intensity = tf.abs(resultant_field)**2
+    return -intensity[slm_n//2, slm_n//2]
 
 
 def train_step():
@@ -68,6 +62,12 @@ def train_step():
     e_field_real.assign(mag*tf.cos(phase))
     return tf.reduce_mean(current_loss).numpy() # return loss for logging
 
+
+# Set up logging.
+# stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+# logdir = 'logs\\simple_angular_prop_tf\\%s' % stamp
+# writer = tf.summary.create_file_writer(logdir)
+# tf.summary.trace_on(graph=True, profiler=True)
 
 wavelength = 633e-9 # HeNe
 k = 2.*np.pi/wavelength
