@@ -26,30 +26,28 @@ print("TPU:", tf.config.experimental.list_physical_devices('TPU'))
 
 wavelength = 633e-9 # HeNe
 k = 2.*np.pi/wavelength
-dx = wavelength/2.
-dy = wavelength/2.
-target_focal_length = 1e-4
-aperture = np.sqrt((target_focal_length**2 - wavelength**2)/2)
+lens_aperture = 50.*wavelength
+target_focal_length = 50.*wavelength
+dd = wavelength/2.
+
+slm_n = int(lens_aperture/dd)
 
 @tf.function
 def loss():
     complex_e_field = tf.dtypes.complex(e_field_real, e_field_imag)
-    # resultant_field = ap_tf.propagate_angular(field=complex_e_field, k=k, z_list=[1e-3, ], dx=dx, dy=dy)[:, :, 0]
-    resultant_field = ap_tf.propagate_angular_padded(field=complex_e_field, k=k, z_list=[1e-3, ], dx=dx, dy=dy)[:, :, 0]
+    resultant_field = ap_tf.propagate_angular_padded(field=complex_e_field, k=k, z_list=[target_focal_length, ], dx=dd, dy=dd)[0, :, :]
     intensity = tf.abs(resultant_field)**2
     # the loss is the correlation between the resultant intensity and the target intensity
     # return tf.reduce_mean((intensity - target_intensity)**2)
-    return -tf.reduce_mean(intensity*target_intensity)
+    return -intensity[slm_n//2, slm_n//2]
 
 
-slm_n = int(aperture/dx)
+
 slm_shape = (slm_n, slm_n, )
-
 complex_split = lambda c: (np.real(c), np.imag(c))
 field_initializer_random = lambda:  np.sqrt(np.random.rand(*slm_shape))*np.exp(1j*np.random.rand(*slm_shape)*np.pi*2)
 field_initializer_uniform = lambda: np.ones(slm_shape, dtype=np.complex128)
-# e_field_real, e_field_imag = complex_split(field_initializer_random())
-e_field_real, e_field_imag = complex_split(field_initializer_uniform())
+e_field_real, e_field_imag = complex_split(field_initializer_random())
 
 e_field_real = tf.Variable(e_field_real, trainable=True)
 e_field_imag = tf.Variable(e_field_imag, trainable=True)
@@ -57,8 +55,8 @@ e_field_imag = tf.Variable(e_field_imag, trainable=True)
 # define a target intensity with a maximum in the center
 def generate_2d_gaussian():
     sigma = wavelength*20.
-    x = np.linspace(-0.5, 0.5, slm_shape[0]) * dx * slm_shape[0]
-    y = np.linspace(-0.5, 0.5, slm_shape[1]) * dy * slm_shape[1]
+    x = np.linspace(-0.5, 0.5, slm_shape[0]) * dd * slm_shape[0]
+    y = np.linspace(-0.5, 0.5, slm_shape[1]) * dd * slm_shape[1]
     Y, X = tf.meshgrid(y, x, indexing='xy')
     return 1/np.sqrt(2*np.pi)*np.exp(-0.5 * ((X / sigma) ** 2 + (Y / sigma) ** 2))
 
@@ -70,10 +68,6 @@ def generate_center_point():
 target_intensity = generate_center_point()
 
 get_intensity = lambda real, imag: real**2 + imag**2
-
-
-
-
 
 #optimizer = optimizer = tf.optimizers.SGD()
 optimizer = tf.optimizers.Adam(learning_rate=0.05)
@@ -95,17 +89,13 @@ def train_step():
     mag = tf.clip_by_value(mag, clip_value_min=0., clip_value_max=1.)
     e_field_imag.assign(mag*tf.sin(phase))
     e_field_real.assign(mag*tf.cos(phase))
-    #
-    # e_field_real.assign(tf.clip_by_value(e_field_real, clip_value_min=-1., clip_value_max=1.))
-    # e_field_imag.assign(tf.clip_by_value(e_field_imag, clip_value_min=-1., clip_value_max=1.))
-
     return tf.reduce_mean(current_loss).numpy()
 
 
 # %%
 
 # Training loop
-iterations = 2 ** 15
+iterations = 2 ** 10
 n_update = 2 ** 6  # Updates information every * iterations
 
 # log to plot parameter convergence
@@ -137,13 +127,13 @@ field_log = np.array(field_log)
 plt.plot(np.imag(field_log[:, :, 0]))
 plt.show()
 
-plt.imshow(get_intensity(e_field_real, e_field_imag))
+plt.imshow(np.sqrt(get_intensity(e_field_real, e_field_imag)))
+plt.colorbar()
 plt.show()
 
-plt.imshow(e_field_real.numpy())
-plt.show()
 
 plt.imshow(np.arctan2(e_field_imag.numpy(), e_field_real.numpy()))
+plt.colorbar()
 plt.show()
 
 plt.imshow(target_intensity)
@@ -151,8 +141,9 @@ plt.show()
 
 
 complex_e_field = tf.dtypes.complex(e_field_real, e_field_imag)
-resultant_field = ap_tf.propagate_angular(field=complex_e_field, k=k, z_list=[1e-3, ], dx=dx, dy=dy)[:, :, 0]
+resultant_field = ap_tf.propagate_angular_padded(field=complex_e_field, k=k, z_list=[target_focal_length, ], dx=dd, dy=dd)[0, :, :]
 intensity = tf.abs(resultant_field)**2
 plt.imshow(intensity)
+plt.colorbar()
 plt.show()
 
