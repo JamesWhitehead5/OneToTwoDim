@@ -73,7 +73,7 @@ wavelength = 633e-9 # HeNe
 k = 2.*np.pi/wavelength
 lens_aperture = 50.*wavelength
 target_focal_length = 50.*wavelength
-dd = wavelength/2.
+dd = wavelength/2. # array element spacing
 slm_n = int(lens_aperture/dd)
 slm_shape = (slm_n, slm_n, )
 
@@ -124,7 +124,9 @@ plt.show()
 
 # plot propagation
 complex_e_field = tf.dtypes.complex(e_field_real, e_field_imag)
-resultant_field = ap_tf.propagate_angular_padded(field=complex_e_field, k=k, z_list=[target_focal_length, ], dx=dd, dy=dd)[0, :, :]
+resultant_field = ap_tf.propagate_angular_padded(
+    field=complex_e_field, k=k, z_list=[target_focal_length, ], dx=dd, dy=dd
+)[0, :, :]
 intensity = tf.abs(resultant_field)**2
 plt.imshow(intensity)
 plt.colorbar()
