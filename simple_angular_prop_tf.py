@@ -38,10 +38,12 @@ def generate_center_point():
 
 @tf.function
 def loss():
+    z_list = np.linspace(100e-6, 200e-6, 15)
+    # z_list = [200e-6, ]
     complex_e_field = tf.dtypes.complex(e_field_real, e_field_imag)
-    resultant_field = ap_tf.propagate_angular_padded(field=complex_e_field, k=k, z_list=[target_focal_length, ], dx=dd, dy=dd)[0, :, :]
-    intensity = tf.abs(resultant_field)**2
-    return -intensity[slm_n//2, slm_n//2]
+    field_centers = ap_tf.propagate_angular_padded(field=complex_e_field, k=k, z_list=z_list, dx=dd, dy=dd, pad_factor=5.)[:, slm_n//2, slm_n//2]
+    intensity_centers = tf.abs(field_centers)**2
+    return -tf.reduce_sum(tf.sqrt(intensity_centers))
 
 
 def train_step():
@@ -62,73 +64,81 @@ def train_step():
     e_field_real.assign(mag*tf.cos(phase))
     return tf.reduce_mean(current_loss).numpy() # return loss for logging
 
+if __name__=='__main__':
 
-# Set up logging.
-# stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-# logdir = 'logs\\simple_angular_prop_tf\\%s' % stamp
-# writer = tf.summary.create_file_writer(logdir)
-# tf.summary.trace_on(graph=True, profiler=True)
+    # Set up logging.
+    # stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    # logdir = 'logs\\simple_angular_prop_tf\\%s' % stamp
+    # writer = tf.summary.create_file_writer(logdir)
+    # tf.summary.trace_on(graph=True, profiler=True)
 
-wavelength = 633e-9 # HeNe
-k = 2.*np.pi/wavelength
-lens_aperture = 50.*wavelength
-target_focal_length = 50.*wavelength
-dd = wavelength/2. # array element spacing
-slm_n = int(lens_aperture/dd)
-slm_shape = (slm_n, slm_n, )
+    wavelength = 633e-9 # HeNe
+    k = 2.*np.pi/wavelength
+    lens_aperture = 50e-6
+    dd = wavelength/2. # array element spacing
+    slm_n = int(lens_aperture/dd)
+    slm_shape = (slm_n, slm_n, )
 
-# initialize and define training variables
-e_field_real, e_field_imag = complex_split(field_initializer_random())
-e_field_real = tf.Variable(e_field_real, trainable=True)
-e_field_imag = tf.Variable(e_field_imag, trainable=True)
+    # initialize and define training variables
+    e_field_real, e_field_imag = complex_split(field_initializer_random())
+    e_field_real = tf.Variable(e_field_real, trainable=True)
+    e_field_imag = tf.Variable(e_field_imag, trainable=True)
 
-optimizer = tf.optimizers.Adam(learning_rate=0.05)
-# Training loop
-iterations = 2 ** 10
-n_update = 2 ** 6  # Updates information every * iterations
+    optimizer = tf.optimizers.Adam(learning_rate=0.05)
+    # Training loop
+    iterations = 2 ** 8
+    n_update = 2 ** 6  # Updates information every * iterations
 
-# log to plot parameter convergence
-field_log = []
+    # log to plot parameter convergence
+    field_log = []
 
-# Training loop
-t = time.time()
-for i in range(iterations):
-    error = train_step()
-    if i % n_update == 0:
-        field_log.append(e_field_real.numpy() + 1j*e_field_imag.numpy())
-        t_now = time.time()
-        print("Error: {}\tTimePerUpdate(s): {}".format(error, t_now - t))
-        t = t_now
+    # Training loop
+    t = time.time()
+    for i in range(iterations):
+        error = train_step()
+        if i % n_update == 0:
+            field_log.append(e_field_real.numpy() + 1j*e_field_imag.numpy())
+            t_now = time.time()
+            print("Error: {}\tTimePerUpdate(s): {}".format(error, t_now - t))
+            t = t_now
 
 
-# with writer.as_default():
-#   tf.summary.trace_export(
-#       name="loss",
-#       step=0,
-#       profiler_outdir=logdir)
 
-# plot convergence of a small sample of parameters
-field_log = np.array(field_log)
-plt.plot(np.imag(field_log[:, :, 0]))
-plt.show()
+    fname = 'slm.p'
+    import pickle
+    slm = {'slm': tf.dtypes.complex(e_field_real, e_field_imag)}
+    pickle.dump(slm, open(fname, "wb"))
 
-# plot intensity
-plt.imshow(np.sqrt(get_intensity(e_field_real, e_field_imag)))
-plt.colorbar()
-plt.show()
 
-# plot phase
-plt.imshow(np.arctan2(e_field_imag.numpy(), e_field_real.numpy()))
-plt.colorbar()
-plt.show()
 
-# plot propagation
-complex_e_field = tf.dtypes.complex(e_field_real, e_field_imag)
-resultant_field = ap_tf.propagate_angular_padded(
-    field=complex_e_field, k=k, z_list=[target_focal_length, ], dx=dd, dy=dd
-)[0, :, :]
-intensity = tf.abs(resultant_field)**2
-plt.imshow(intensity)
-plt.colorbar()
-plt.show()
+    # with writer.as_default():
+    #   tf.summary.trace_export(
+    #       name="loss",
+    #       step=0,
+    #       profiler_outdir=logdir)
+
+    # plot convergence of a small sample of parameters
+    field_log = np.array(field_log)
+    plt.plot(np.imag(field_log[:, :, 0]))
+    plt.show()
+
+    # plot intensity
+    plt.imshow(np.sqrt(get_intensity(e_field_real, e_field_imag)))
+    plt.colorbar()
+    plt.show()
+
+    # plot phase
+    plt.imshow(np.arctan2(e_field_imag.numpy(), e_field_real.numpy()))
+    plt.colorbar()
+    plt.show()
+
+    # plot propagation
+    complex_e_field = tf.dtypes.complex(e_field_real, e_field_imag)
+    resultant_field = ap_tf.propagate_angular_padded(
+        field=complex_e_field, k=k, z_list=[target_focal_length, ], dx=dd, dy=dd
+    )[0, :, :]
+    intensity = tf.abs(resultant_field)**2
+    plt.imshow(intensity)
+    plt.colorbar()
+    plt.show()
 
