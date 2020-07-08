@@ -471,14 +471,13 @@ if __name__ == '__main__':
     optimizer = tf.optimizers.Adam(learning_rate=0.1)
     # Training loop
     iterations = 2 ** 14
-    n_update = 2 ** 4  # Updates information every `n_update` iterations
+    n_update = 2 ** 4  # Prints information every `n_update` iterations
 
     # Training loop
     t = time.time()
     for i in range(iterations):
         error = train_step()
         if i % n_update == 0:
-            # field_log.append(metasurface_real.numpy() + 1j*metasurface_imag.numpy())
             t_now = time.time()
             print("Error: {}\tTimePerUpdate(s): {}\t {}/{}".format(error, t_now - t, i + 1, iterations))
             t = t_now
