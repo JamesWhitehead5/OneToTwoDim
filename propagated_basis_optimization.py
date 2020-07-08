@@ -214,11 +214,6 @@ def complex_initializer_random(shape):
 def forward(weights):
     def prop(x):
         """Propagates fields `prop_distantce`"""
-        # return ap.propagate_angular_bw_limited(field=x, k=sim_args['k'], z_list=[sim_args['prop_distance'], ],
-        #                                       dx=sim_args['dd'],
-        #                                       dy=sim_args['dd'],
-        #                                       )[0, :, :]
-
         return ap.propagate_padded(
             propagator=ap.propagate_angular_bw_limited,
             field=x, k=sim_args['k'], z_list=[sim_args['prop_distance'], ],
