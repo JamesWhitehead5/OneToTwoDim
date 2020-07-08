@@ -75,11 +75,13 @@ def generate_fourier_modes(slm_size):
 
     return np.transpose(modes, axes=(1, 2, 0))
 
+
 def load_composed_modes():
     import pickle
     data = pickle.load(open("two_ms.p", "rb"))
     # return tf.transpose(data['forward'], perm=(1, 2, 0))
     return tf.transpose(data['forward'], perm=(1, 2, 0))
+
 
 if __name__=='__main__':
     @tf.function

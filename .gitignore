@@ -1,0 +1,6 @@
+Dockerfile
+logs/
+*.p
+.idea
+__pycache__/
+*.gif
