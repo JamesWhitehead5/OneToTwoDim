@@ -214,11 +214,6 @@ def complex_initializer_random(shape):
 def forward(weights):
     def prop(x):
         """Propagates fields `prop_distantce`"""
-        # return ap.propagate_angular_bw_limited(field=x, k=sim_args['k'], z_list=[sim_args['prop_distance'], ],
-        #                                       dx=sim_args['dd'],
-        #                                       dy=sim_args['dd'],
-        #                                       )[0, :, :]
-
         return ap.propagate_padded(
             propagator=ap.propagate_angular_bw_limited,
             field=x, k=sim_args['k'], z_list=[sim_args['prop_distance'], ],
@@ -274,7 +269,7 @@ def forward(weights):
         )
         return field_after
 
-    field_set = fg(weights)
+    field_set = field_generator(weights)
 
     field_set = tf.map_fn(fn=prop, elems=field_set)
     # field_set = tf.map_fn(fn=lens_full, elems=field_set)
@@ -412,7 +407,7 @@ if __name__ == '__main__':
 
     sim_args = {
         'wavelength': 633e-9,  # HeNe
-        'slm_size': 282,  # side length of the array
+        'slm_size': 282,  # defines a simulation region of `slm_size` by `slm_size`
     }
 
     sim_args = {
@@ -439,15 +434,19 @@ if __name__ == '__main__':
     }
 
     # initialize the 1D SLM basis set.
+    # 1D SLM pixel coeffients
+    # weighs is a constant TODO: Make constants
     weights = tf.Variable(tf.ones(sim_args['n_modes'], dtype=dtype['comp']))
 
     slm_args = {'n_weights': sim_args['n_modes'], 'pixel_width': 2, 'pixel_height': 2, 'pixel_spacing': 3,
                 'end_spacing': 20, 'dtype': dtype['comp']}
-    fg = oneD_slm_field_generator.OneDPhasorField(**slm_args)
+
+
+    field_generator = oneD_slm_field_generator.OneDPhasorField(**slm_args)
 
     # Make sure that this input modes shape match the simulation shape
-    assert fg.n == sim_args['slm_size'], "SLM field and simulation field mismatch. Adjust the 1D Slm structure. ({} " \
-                                         "vs {})".format(fg.n, sim_args['slm_size'])
+    assert field_generator.n == sim_args['slm_size'], "SLM field and simulation field mismatch. Adjust the 1D Slm structure. ({} " \
+                                         "vs {})".format(field_generator.n, sim_args['slm_size'])
 
     # initialize and define first metasurface
     metasurface1_real, metasurface1_imag = split_complex(complex_initializer_random(shape=sim_args['slm_shape']))
@@ -467,21 +466,20 @@ if __name__ == '__main__':
     optimizer = tf.optimizers.Adam(learning_rate=0.1)
     # Training loop
     iterations = 2 ** 14
-    n_update = 2 ** 4  # Updates information every `n_update` iterations
+    n_update = 2 ** 4  # Prints information every `n_update` iterations
 
     # Training loop
     t = time.time()
     for i in range(iterations):
         error = train_step()
         if i % n_update == 0:
-            # field_log.append(metasurface_real.numpy() + 1j*metasurface_imag.numpy())
             t_now = time.time()
             print("Error: {}\tTimePerUpdate(s): {}\t {}/{}".format(error, t_now - t, i + 1, iterations))
             t = t_now
 
 
     # Simulation complete. Now plotting results.
-    fields = fg(weights)
+    fields = field_generator(weights)
     plt.pcolormesh(tf.abs(tf.reduce_sum(fields, axis=0)).numpy(), edgecolors='k')
     plt.show()
 
@@ -545,7 +543,7 @@ if __name__ == '__main__':
         'forward': propagation.numpy(),
         # 'forward_filtered': filtered_prop_fields.numpy(),
         'weights': weights.numpy(),
-        'inputs_modes': fg(weights).numpy(),
+        'inputs_modes': field_generator(weights).numpy(),
     }
 
     import pickle
