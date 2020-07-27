@@ -609,7 +609,7 @@ if __name__ == '__main__':
             'real2': metasurface2_real,
             'imag2': metasurface2_imag,
         },
-        'forward': propagation.numpy(),
+        'forward': forward(weights).numpy(),
         # 'forward_filtered': filtered_prop_fields.numpy(),
         'weights': weights.numpy(),
         'inputs_modes': field_generator(weights).numpy(),
