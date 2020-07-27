@@ -1,7 +1,8 @@
 # from simple_angular_prop_tf import complex_split
 import tensorflow as tf
 # import AngularPropagateTensorflow.AngularPropagateTensorflow as ap_tf
-import AngularPropagateTensorflow as ap_tf
+# import AngularPropagateTensorflow as ap_tf
+from . import AngularPropagateTensorflow as ap_tf
 import numpy as np
 import matplotlib.pyplot as plt
 

@@ -1,7 +1,13 @@
+import sys, os
+sys.path.insert(1, os.path.join(sys.path[0], '..'))
+sys.path.insert(1, os.path.join(sys.path[0], '../code'))
+
+
+import AngularPropagateTensorflow as ap
 import tensorflow as tf
 import numpy as np
-import sys
-import AngularPropagateTensorflow as ap
+
+#import AngularPropagateTensorflow as ap
 
 import oneD_slm_field_generator
 
