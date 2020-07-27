@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 from typing import Generator, List, Tuple
 import time
 
-tf.debugging.set_log_device_placement(True)
+# tf.debugging.set_log_device_placement(True)
 
 def strictly_triangular_indices(size: int) -> List[Tuple[int, int]]:
     """Returns a list of tuples that contain the indices of strictly non-zero elements of a _strictly_ triangular matrix
