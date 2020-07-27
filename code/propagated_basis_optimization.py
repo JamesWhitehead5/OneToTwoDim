@@ -2,6 +2,12 @@ import tensorflow as tf
 import numpy as np
 import sys
 import AngularPropagateTensorflow as ap
+try:
+    import AngularPropagateTensorflow.AngularPropagateTensorflow as ap
+except:
+    pass
+
+
 
 import oneD_slm_field_generator
 
@@ -9,6 +15,7 @@ import matplotlib.pyplot as plt
 from typing import Generator, List, Tuple
 import time
 
+tf.debugging.set_log_device_placement(True)
 
 def strictly_triangular_indices(size: int) -> List[Tuple[int, int]]:
     """Returns a list of tuples that contain the indices of strictly non-zero elements of a _strictly_ triangular matrix
@@ -149,17 +156,27 @@ def nearest_rectangle(a: int) -> Tuple[int, int]:
     return min(factor_pair), max(factor_pair)
 
 
-def plot_modes(set):
+def plot_modes(set, scale=1.):
+    set = np.abs(set)
     n_modes = set.shape[0]
     plot_shape = nearest_rectangle(n_modes)
-    fig, axs = plt.subplots(*plot_shape)
+    fig, axs = plt.subplots(*plot_shape, figsize=(scale*plot_shape[0], scale*plot_shape[1]))
+    vmax = np.max(set)
+    vmin = min(np.min(set), 0.)
     for i in range(n_modes):
         ax = axs[np.unravel_index(i, shape=plot_shape)]
-        im = ax.imshow(np.abs(set[i, :, :]))
+        im = ax.imshow(set[i, :, :], vmin=vmin, vmax=vmax)
         plt.axis('off')
         ax.axis('off')
-        fig.colorbar(im, ax=ax)
-    plt.show()
+        #fig.colorbar(im, cax=ax)
+    plt.tight_layout()
+
+
+    # fig.tight_layout(pad=0.01)
+    # fig.colorbar(im, ax=axs[:, :], shrink=1.)
+    #fig.subplots_adjust(right=0.8)
+    #cbar_ax = fig.add_axes([0.95, 0.15, 0.02, 0.7]) # [left bottom width height]
+    #fig.colorbar(im, cax=cbar_ax)
 
 
 def plot_modes_fft(set):
@@ -252,19 +269,31 @@ def forward(weights):
         return lens_f(A, sim_args['prop_distance'] / 2.)
 
     def meta1(A):
+        # field_after = tf.complex(
+        #     *complex_mul(
+        #         *split_complex(A),
+        #         metasurface1_real, metasurface1_imag,
+        #     )
+        # )
         field_after = tf.complex(
             *complex_mul(
                 *split_complex(A),
-                metasurface1_real, metasurface1_imag,
+                tf.math.cos(metasurface1_phase), tf.math.sin(metasurface1_phase),
             )
         )
         return field_after
 
     def meta2(A):
+        # field_after = tf.complex(
+        #     *complex_mul(
+        #         *split_complex(A),
+        #         metasurface2_real, metasurface2_imag,
+        #     )
+        # )
         field_after = tf.complex(
             *complex_mul(
                 *split_complex(A),
-                metasurface2_real, metasurface2_imag,
+                tf.math.cos(metasurface2_phase), tf.math.sin(metasurface2_phase),
             )
         )
         return field_after
@@ -352,7 +381,8 @@ def loss_binned():
 # @tf.function
 def train_step():
     # Variables to be trained
-    train_vars = [metasurface1_real, metasurface1_imag, metasurface2_real, metasurface2_imag, ]
+    #train_vars = [metasurface1_real, metasurface1_imag, metasurface2_real, metasurface2_imag, ]
+    train_vars = [metasurface1_phase, metasurface2_phase, ]
 
     with tf.GradientTape() as tape:
         # current_loss = orthogonal_loss()
@@ -362,30 +392,35 @@ def train_step():
     # update weights
     optimizer.apply_gradients(zip(grads, train_vars))
 
-    def clip_magnitudes(real, imag):
-        """
-        If the value of any element is outside the unit circle on the complex plane, the value is moved onto the unit
-        circle while keeping the same angle.
-        """
-        phase = tf.math.atan2(imag, real)
-        mag = tf.sqrt(real ** 2 + imag ** 2)
-        mag = tf.clip_by_value(mag, clip_value_min=0., clip_value_max=1.)
-        imag.assign(mag * tf.sin(phase))
-        real.assign(mag * tf.cos(phase))
+    # def clip_magnitudes(real, imag):
+    #     """
+    #     If the value of any element is outside the unit circle on the complex plane, the value is moved onto the unit
+    #     circle while keeping the same angle.
+    #     """
+    #     phase = tf.math.atan2(imag, real)
+    #     mag = tf.sqrt(real ** 2 + imag ** 2)
+    #     mag = tf.clip_by_value(mag, clip_value_min=0., clip_value_max=1.)
+    #     imag.assign(mag * tf.sin(phase))
+    #     real.assign(mag * tf.cos(phase))
 
-    clip_magnitudes(metasurface1_real, metasurface1_imag)
-    clip_magnitudes(metasurface2_real, metasurface2_imag)
+    # clip_magnitudes(metasurface1_real, metasurface1_imag)
+    # clip_magnitudes(metasurface2_real, metasurface2_imag)
 
-    def low_pass(real, imag):
-        """Applies a spatial low pass filter to an array"""
-        filter_width = 20
-        n, _ = real.shape
-        pad = (n - filter_width) // 2
-        real_filtered, imag_filtered = apply_low_pass_filter(tf.expand_dims(real, axis=0), tf.expand_dims(imag, axis=0),
-                                                             pad_x=pad, pad_y=pad)
-        real.assign(real_filtered[0, ...])
-        imag.assign(imag_filtered[0, ...])
 
+    # @tf.function
+    # def low_pass(real, imag):
+    #     """Applies a spatial low pass filter to an array"""
+    #     filter_width = 150
+    #     n, _ = real.shape
+    #     pad = (n - filter_width) // 2
+    #     real_filtered, imag_filtered = apply_low_pass_filter(tf.expand_dims(real, axis=0), tf.expand_dims(imag, axis=0),
+    #                                                          pad_x=pad, pad_y=pad)
+    #     real.assign(real_filtered[0, ...])
+    #     imag.assign(imag_filtered[0, ...])
+    #
+    # metasurface1_real, metasurface1_imag = tf.math.cos(metasurface1_phase), tf.math.sin(metasurface1_phase)
+    # metasurface2_real, metasurface2_imag = tf.math.cos(metasurface2_phase), tf.math.sin(metasurface2_phase)
+    #
     # low_pass(metasurface1_real, metasurface1_imag)
     # low_pass(metasurface2_real, metasurface2_imag)
 
@@ -407,7 +442,7 @@ if __name__ == '__main__':
 
     sim_args = {
         'wavelength': 633e-9,  # HeNe
-        'slm_size': 282,  # defines a simulation region of `slm_size` by `slm_size`
+        'slm_size': 473,  # defines a simulation region of `slm_size` by `slm_size`
     }
 
     sim_args = {
@@ -419,17 +454,17 @@ if __name__ == '__main__':
         **sim_args,
         **{
             'k': 2. * np.pi / sim_args['wavelength'],
-            'prop_distance': 250. * sim_args['wavelength'],
+            'prop_distance': 500. * sim_args['wavelength'],
 
             'slm_shape': (sim_args['slm_size'], sim_args['slm_size'],),
             'dd': sim_args['lens_aperture'] / sim_args['slm_size'],  # array element spacing
             # allows `filter_height` * `filter_width` number of orthogonal modes through
             # 'filter_height': 7,
             # 'filter_width': 7,
-            'n_i_bins': 7,
-            'n_j_bins': 7,
+            'n_i_bins': 10,
+            'n_j_bins': 10,
 
-            'n_modes': 49,
+            'n_modes': 100,
         }
     }
 
@@ -438,8 +473,8 @@ if __name__ == '__main__':
     # weighs is a constant TODO: Make constants
     weights = tf.Variable(tf.ones(sim_args['n_modes'], dtype=dtype['comp']))
 
-    slm_args = {'n_weights': sim_args['n_modes'], 'pixel_width': 2, 'pixel_height': 2, 'pixel_spacing': 3,
-                'end_spacing': 20, 'dtype': dtype['comp']}
+    slm_args = {'n_weights': sim_args['n_modes'], 'pixel_width': 1, 'pixel_height': 1, 'pixel_spacing': 3,
+                'end_spacing': 38, 'dtype': dtype['comp']}
 
 
     field_generator = oneD_slm_field_generator.OneDPhasorField(**slm_args)
@@ -448,24 +483,35 @@ if __name__ == '__main__':
     assert field_generator.n == sim_args['slm_size'], "SLM field and simulation field mismatch. Adjust the 1D Slm structure. ({} " \
                                          "vs {})".format(field_generator.n, sim_args['slm_size'])
 
-    # initialize and define first metasurface
-    metasurface1_real, metasurface1_imag = split_complex(complex_initializer_random(shape=sim_args['slm_shape']))
-    metasurface1_real = tf.Variable(tf.cast(metasurface1_real, dtype=dtype['real']), dtype=dtype['real'],
-                                    trainable=True)
-    metasurface1_imag = tf.Variable(tf.cast(metasurface1_imag, dtype=dtype['real']), dtype=dtype['real'],
-                                    trainable=True)
 
-    # initialize and define second metasurface
-    metasurface2_real, metasurface2_imag = split_complex(complex_initializer_random(shape=sim_args['slm_shape']))
-    metasurface2_real = tf.Variable(tf.cast(metasurface2_real, dtype=dtype['real']), dtype=dtype['real'],
-                                    trainable=True)
-    metasurface2_imag = tf.Variable(tf.cast(metasurface2_imag, dtype=dtype['real']), dtype=dtype['real'],
-                                    trainable=True)
+    metasurface1_phase = tf.Variable(
+        tf.random.uniform(shape=sim_args['slm_shape'], maxval=np.pi*2., dtype=dtype['real']),
+        trainable=True,
+    )
+    metasurface2_phase = tf.Variable(
+        tf.random.uniform(shape=sim_args['slm_shape'], maxval=np.pi*2., dtype=dtype['real']),
+        trainable=True,
+    )
+
+    #
+    # # initialize and define first metasurface
+    # metasurface1_real, metasurface1_imag = split_complex(complex_initializer_random(shape=sim_args['slm_shape']))
+    # metasurface1_real = tf.Variable(tf.cast(metasurface1_real, dtype=dtype['real']), dtype=dtype['real'],
+    #                                 trainable=True)
+    # metasurface1_imag = tf.Variable(tf.cast(metasurface1_imag, dtype=dtype['real']), dtype=dtype['real'],
+    #                                 trainable=True)
+    #
+    # # initialize and define second metasurface
+    # metasurface2_real, metasurface2_imag = split_complex(complex_initializer_random(shape=sim_args['slm_shape']))
+    # metasurface2_real = tf.Variable(tf.cast(metasurface2_real, dtype=dtype['real']), dtype=dtype['real'],
+    #                                 trainable=True)
+    # metasurface2_imag = tf.Variable(tf.cast(metasurface2_imag, dtype=dtype['real']), dtype=dtype['real'],
+    #                                 trainable=True)
 
 
     optimizer = tf.optimizers.Adam(learning_rate=0.1)
     # Training loop
-    iterations = 2 ** 14
+    iterations = 2 ** 8
     n_update = 2 ** 4  # Prints information every `n_update` iterations
 
     # Training loop
@@ -477,13 +523,15 @@ if __name__ == '__main__':
             print("Error: {}\tTimePerUpdate(s): {}\t {}/{}".format(error, t_now - t, i + 1, iterations))
             t = t_now
 
+    metasurface1_real, metasurface1_imag = tf.math.cos(metasurface1_phase), tf.math.sin(metasurface1_phase)
+    metasurface2_real, metasurface2_imag = tf.math.cos(metasurface2_phase), tf.math.sin(metasurface2_phase)
 
     # Simulation complete. Now plotting results.
     fields = field_generator(weights)
     plt.pcolormesh(tf.abs(tf.reduce_sum(fields, axis=0)).numpy(), edgecolors='k')
     plt.show()
 
-    plot_modes(fields)
+    plot_modes(fields, 5)
     plt.show()
 
     plot_slice(np.angle(metasurface1_real.numpy() + 1j * metasurface1_imag.numpy()), "Optimized metasurface 1 phase")
@@ -492,7 +540,7 @@ if __name__ == '__main__':
     plot_slice(np.angle(metasurface2_real.numpy() + 1j * metasurface2_imag.numpy()), "Optimized metasurface 2 phase")
     plot_slice(np.abs(metasurface2_real.numpy() + 1j * metasurface2_imag.numpy()), "Optimized metasurface 2 magnitude")
 
-    plot_modes(forward(weights).numpy())
+    plot_modes(forward(weights).numpy(), 5)
     plt.show()
 
     # plot_modes_fft(forward(weights))
@@ -506,6 +554,23 @@ if __name__ == '__main__':
         )
     )
     plt.show()
+
+
+
+    p_weights = np.zeros(49)
+    p_indicies = [8, 9, 11, 12, 15, 16, 18, 19, 29, 33, 37, 38, 39, ]
+    for i in p_indicies:
+        p_weights[i] = 1
+    plot_slice(tf.math.abs(tf.reduce_sum(forward(tf.constant(p_weights)), axis=0)) ** 2, title="Smile");
+    plt.show()
+
+    a = np.zeros(shape=(7, 7))
+    p_indicies = [8, 9, 11, 12, 15, 16, 18, 19, 29, 33, 37, 38, 39, ]
+    for i in p_indicies:
+        a[i % 7, i // 7] = 1.
+    plt.imshow(np.transpose(a))
+    plt.show()
+
 
     propagation = forward(weights)
     # filtered_prop_fields = tf.complex(
@@ -547,4 +612,6 @@ if __name__ == '__main__':
     }
 
     import pickle
-    pickle.dump(data, open("two_ms.p", "wb"))
+    pickle.dump(data, open("data/two_ms.p", "wb"))
+
+    #
