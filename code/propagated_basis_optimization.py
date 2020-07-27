@@ -3,7 +3,7 @@ sys.path.insert(1, os.path.join(sys.path[0], '..'))
 sys.path.insert(1, os.path.join(sys.path[0], '../code'))
 
 
-import AngularPropagateTensorflow as ap
+from AngularPropagateTensorflow import AngularPropagateTensorflow as ap
 import tensorflow as tf
 import numpy as np
 
