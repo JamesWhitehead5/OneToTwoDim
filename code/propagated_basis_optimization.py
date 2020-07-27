@@ -2,6 +2,7 @@ import sys, os
 sys.path.insert(1, os.path.join(sys.path[0], '..'))
 sys.path.insert(1, os.path.join(sys.path[0], '../code'))
 
+import pickle
 
 from AngularPropagateTensorflow import AngularPropagateTensorflow as ap
 import tensorflow as tf
@@ -526,72 +527,75 @@ if __name__ == '__main__':
     metasurface1_real, metasurface1_imag = tf.math.cos(metasurface1_phase), tf.math.sin(metasurface1_phase)
     metasurface2_real, metasurface2_imag = tf.math.cos(metasurface2_phase), tf.math.sin(metasurface2_phase)
 
-    # Simulation complete. Now plotting results.
-    fields = field_generator(weights)
-    plt.pcolormesh(tf.abs(tf.reduce_sum(fields, axis=0)).numpy(), edgecolors='k')
-    plt.show()
 
-    plot_modes(fields, 5)
-    plt.show()
+    plotting=False
+    if plotting:
+        # Simulation complete. Now plotting results.
+        fields = field_generator(weights)
+        plt.pcolormesh(tf.abs(tf.reduce_sum(fields, axis=0)).numpy(), edgecolors='k')
+        plt.show()
 
-    plot_slice(np.angle(metasurface1_real.numpy() + 1j * metasurface1_imag.numpy()), "Optimized metasurface 1 phase")
-    plot_slice(np.abs(metasurface1_real.numpy() + 1j * metasurface1_imag.numpy()), "Optimized metasurface 1 magnitude")
+        plot_modes(fields, 5)
+        plt.show()
 
-    plot_slice(np.angle(metasurface2_real.numpy() + 1j * metasurface2_imag.numpy()), "Optimized metasurface 2 phase")
-    plot_slice(np.abs(metasurface2_real.numpy() + 1j * metasurface2_imag.numpy()), "Optimized metasurface 2 magnitude")
+        plot_slice(np.angle(metasurface1_real.numpy() + 1j * metasurface1_imag.numpy()), "Optimized metasurface 1 phase")
+        plot_slice(np.abs(metasurface1_real.numpy() + 1j * metasurface1_imag.numpy()), "Optimized metasurface 1 magnitude")
 
-    plot_modes(forward(weights).numpy(), 5)
-    plt.show()
+        plot_slice(np.angle(metasurface2_real.numpy() + 1j * metasurface2_imag.numpy()), "Optimized metasurface 2 phase")
+        plot_slice(np.abs(metasurface2_real.numpy() + 1j * metasurface2_imag.numpy()), "Optimized metasurface 2 magnitude")
 
-    # plot_modes_fft(forward(weights))
-    # plt.show()
+        plot_modes(forward(weights).numpy(), 5)
+        plt.show()
 
-    # plot abs correlation matrix
-    plt.figure()
-    plt.imshow(
-        np.abs(
-            correlation_matrix(forward(weights))
+        # plot_modes_fft(forward(weights))
+        # plt.show()
+
+        # plot abs correlation matrix
+        plt.figure()
+        plt.imshow(
+            np.abs(
+                correlation_matrix(forward(weights))
+            )
         )
-    )
-    plt.show()
+        plt.show()
 
 
 
-    p_weights = np.zeros(49)
-    p_indicies = [8, 9, 11, 12, 15, 16, 18, 19, 29, 33, 37, 38, 39, ]
-    for i in p_indicies:
-        p_weights[i] = 1
-    plot_slice(tf.math.abs(tf.reduce_sum(forward(tf.constant(p_weights)), axis=0)) ** 2, title="Smile");
-    plt.show()
+        p_weights = np.zeros(49)
+        p_indicies = [8, 9, 11, 12, 15, 16, 18, 19, 29, 33, 37, 38, 39, ]
+        for i in p_indicies:
+            p_weights[i] = 1
+        plot_slice(tf.math.abs(tf.reduce_sum(forward(tf.constant(p_weights)), axis=0)) ** 2, title="Smile");
+        plt.show()
 
-    a = np.zeros(shape=(7, 7))
-    p_indicies = [8, 9, 11, 12, 15, 16, 18, 19, 29, 33, 37, 38, 39, ]
-    for i in p_indicies:
-        a[i % 7, i // 7] = 1.
-    plt.imshow(np.transpose(a))
-    plt.show()
+        a = np.zeros(shape=(7, 7))
+        p_indicies = [8, 9, 11, 12, 15, 16, 18, 19, 29, 33, 37, 38, 39, ]
+        for i in p_indicies:
+            a[i % 7, i // 7] = 1.
+        plt.imshow(np.transpose(a))
+        plt.show()
 
 
-    propagation = forward(weights)
-    # filtered_prop_fields = tf.complex(
-    #     *apply_low_pass_filter(
-    #         *split_complex(propagation),
-    #         pad_x=(sim_args['slm_size']-sim_args['filter_width'])//2,
-    #         pad_y=(sim_args['slm_size']-sim_args['filter_width'])//2,
-    #
-    #     )
-    # )
-    # plot_modes(filtered_prop_fields.numpy())
-    # plot_modes_fft(filtered_prop_fields.numpy())
+        propagation = forward(weights)
+        # filtered_prop_fields = tf.complex(
+        #     *apply_low_pass_filter(
+        #         *split_complex(propagation),
+        #         pad_x=(sim_args['slm_size']-sim_args['filter_width'])//2,
+        #         pad_y=(sim_args['slm_size']-sim_args['filter_width'])//2,
+        #
+        #     )
+        # )
+        # plot_modes(filtered_prop_fields.numpy())
+        # plot_modes_fft(filtered_prop_fields.numpy())
 
-    # # plot abs correlation matrix
-    # plt.figure()
-    # plt.imshow(
-    #     np.abs(
-    #         correlation_matrix(filtered_prop_fields)
-    #     )
-    # )
-    # plt.show()
+        # # plot abs correlation matrix
+        # plt.figure()
+        # plt.imshow(
+        #     np.abs(
+        #         correlation_matrix(filtered_prop_fields)
+        #     )
+        # )
+        # plt.show()
 
 
 
@@ -611,7 +615,7 @@ if __name__ == '__main__':
         'inputs_modes': field_generator(weights).numpy(),
     }
 
-    import pickle
+
     pickle.dump(data, open("data/two_ms.p", "wb"))
 
     #
