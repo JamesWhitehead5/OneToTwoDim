@@ -3,8 +3,6 @@ import numpy as np
 import sys
 import AngularPropagateTensorflow as ap
 
-
-
 import oneD_slm_field_generator
 
 import matplotlib.pyplot as plt
