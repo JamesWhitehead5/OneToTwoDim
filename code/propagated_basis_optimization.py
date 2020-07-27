@@ -615,7 +615,9 @@ if __name__ == '__main__':
         'inputs_modes': field_generator(weights).numpy(),
     }
 
-
-    pickle.dump(data, open("data/two_ms.p", "wb"))
+    dir = "./data"
+    if not os.path.exists(dir):
+        os.mkdir(dir)
+    pickle.dump(data, open(os.path.join(dir, "two_ms.p"), "wb"))
 
     #
