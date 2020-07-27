@@ -2,10 +2,6 @@ import tensorflow as tf
 import numpy as np
 import sys
 import AngularPropagateTensorflow as ap
-try:
-    import AngularPropagateTensorflow.AngularPropagateTensorflow as ap
-except:
-    pass
 
 
 
