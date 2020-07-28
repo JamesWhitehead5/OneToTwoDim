@@ -45,6 +45,7 @@ input_modes = slm['inputs_modes']
 propagations = []
 
 for i in range(0, len(input_modes)):
+    print("Propagating to field {} of {}".format(i+1, len(input_modes)))
     # z, x, y
     slices = np.zeros(shape=(3*n_slices, *input_modes[i].shape,), dtype=input_modes[i].dtype)
 
