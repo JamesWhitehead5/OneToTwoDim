@@ -62,10 +62,12 @@ for i in range(0, len(input_modes)):
 #pickle.dump({'propagations': propagations}, open("data/two_ms_propagation.p", "wb"), protocol=2)
 # np.save(file=open("data/two_ms_propagation.p", "wb"), arr=propagations)
 
+print("Saving output")
+
 import h5py
 with h5py.File("data/two_ms_propagation.p", "w") as f:
     for i, propagation in enumerate(propagations):
         f.create_dataset("propagation_{}".format(i), data=propagation)
 
 
-
+print("Finished Saving output")
