@@ -193,7 +193,7 @@ def plot_slice(image, title):
     plt.xlabel(r'x ($\mu m$)')
     plt.ylabel(r'y ($\mu m$)')
     plt.title(title)
-    plt.colorbar()
+    #plt.colorbar()
     plt.show()
 
 
@@ -443,7 +443,9 @@ if __name__ == '__main__':
 
     sim_args = {
         'wavelength': 633e-9,  # HeNe
-        'slm_size': 473,  # defines a simulation region of `slm_size` by `slm_size`
+        # 'slm_size': 473,  # defines a simulation region of `slm_size` by `slm_size`
+        'slm_size': 262,  # defines a simulation region of `slm_size` by `slm_size`
+
     }
 
     sim_args = {
@@ -462,10 +464,10 @@ if __name__ == '__main__':
             # allows `filter_height` * `filter_width` number of orthogonal modes through
             # 'filter_height': 7,
             # 'filter_width': 7,
-            'n_i_bins': 10,
-            'n_j_bins': 10,
+            'n_i_bins': 7,
+            'n_j_bins': 7,
 
-            'n_modes': 100,
+            'n_modes': 49,
         }
     }
 
@@ -474,8 +476,8 @@ if __name__ == '__main__':
     # weighs is a constant TODO: Make constants
     weights = tf.Variable(tf.ones(sim_args['n_modes'], dtype=dtype['comp']))
 
-    slm_args = {'n_weights': sim_args['n_modes'], 'pixel_width': 1, 'pixel_height': 1, 'pixel_spacing': 3,
-                'end_spacing': 38, 'dtype': dtype['comp']}
+    slm_args = {'n_weights': sim_args['n_modes'], 'pixel_width': 2, 'pixel_height': 2, 'pixel_spacing': 3,
+                'end_spacing': 10, 'dtype': dtype['comp']}
 
 
     field_generator = oneD_slm_field_generator.OneDPhasorField(**slm_args)
@@ -532,7 +534,7 @@ if __name__ == '__main__':
     if plotting:
         # Simulation complete. Now plotting results.
         fields = field_generator(weights)
-        plt.pcolormesh(tf.abs(tf.reduce_sum(fields, axis=0)).numpy(), edgecolors='k')
+        plot_slice(tf.abs(tf.reduce_sum(fields, axis=0)).numpy(), title="")
         plt.show()
 
         plot_modes(fields, 5)
@@ -562,17 +564,22 @@ if __name__ == '__main__':
 
 
         p_weights = np.zeros(49)
-        p_indicies = [8, 9, 11, 12, 15, 16, 18, 19, 29, 33, 37, 38, 39, ]
+        # p_indicies = [8, 9, 11, 12, 15, 16, 18, 19, 29, 33, 37, 38, 39, ]
+        p_indicies = [2, 4, 9, 11, 16, 17, 18, 29, 31, 33, 36, 38, 40, 43, 44, 45, 46, 47, ]
         for i in p_indicies:
             p_weights[i] = 1
-        plot_slice(tf.math.abs(tf.reduce_sum(forward(tf.constant(p_weights)), axis=0)) ** 2, title="Smile");
+        plot_slice(tf.math.abs(tf.reduce_sum(forward(tf.constant(p_weights)), axis=0)) ** 2, title="");
+        plt.show()
+
+        p_fields = field_generator(p_weights)
+        plot_slice(tf.abs(tf.reduce_sum(p_fields, axis=0)).numpy(), title="")
         plt.show()
 
         a = np.zeros(shape=(7, 7))
-        p_indicies = [8, 9, 11, 12, 15, 16, 18, 19, 29, 33, 37, 38, 39, ]
         for i in p_indicies:
             a[i % 7, i // 7] = 1.
-        plt.imshow(np.transpose(a))
+        # plt.imshow(np.transpose(a))
+        plot_slice(np.transpose(a), title="");
         plt.show()
 
 
