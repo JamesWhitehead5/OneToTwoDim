@@ -478,8 +478,11 @@ if __name__ == '__main__':
     # weighs is a constant TODO: Make constants
     weights = tf.Variable(tf.ones(sim_args['n_modes'], dtype=dtype['comp']))
 
-    slm_args = {'n_weights': sim_args['n_modes'], 'pixel_width': 2, 'pixel_height': 2, 'pixel_spacing': 3,
-                'end_spacing': 10, 'dtype': dtype['comp']}
+    slm_args = {'n_weights': sim_args['n_modes'], 'pixel_width': 20, 'pixel_height': 1, 'pixel_spacing': 127,
+                 'dtype': dtype['comp']}
+    slm_args['end_spacing'] = (sim_args['slm_size'] - (
+            sim_args['n_modes']*slm_args['pixel_height'] + (sim_args['n_modes'] - 1 )*slm_args['pixel_spacing']
+    )) // 2
 
 
     field_generator = oneD_slm_field_generator.OneDPhasorField(**slm_args)
