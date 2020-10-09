@@ -1,6 +1,9 @@
 import sys, os
-sys.path.insert(1, os.path.join(sys.path[0], '..'))
-sys.path.insert(1, os.path.join(sys.path[0], '../code'))
+
+sys.path.insert(1, os.path.join(sys.path[-1], 'code'))
+sys.path.insert(1, os.path.join(sys.path[-1], '.'))
+# import code.oneD_slm_field_generator
+import oneD_slm_field_generator
 
 import pickle
 
@@ -8,9 +11,8 @@ from AngularPropagateTensorflow import AngularPropagateTensorflow as ap
 import tensorflow as tf
 import numpy as np
 
-#import AngularPropagateTensorflow as ap
 
-import oneD_slm_field_generator
+
 
 import matplotlib.pyplot as plt
 from typing import Generator, List, Tuple
@@ -483,7 +485,7 @@ if __name__ == '__main__':
     field_generator = oneD_slm_field_generator.OneDPhasorField(**slm_args)
 
     # Make sure that this input modes shape match the simulation shape
-    assert field_generator.n == sim_args['slm_size'], "SLM field and simulation field mismatch. Adjust the 1D Slm structure. ({} " \
+    assert oneD_slm_field_generator.n == sim_args['slm_size'], "SLM field and simulation field mismatch. Adjust the 1D Slm structure. ({} " \
                                          "vs {})".format(field_generator.n, sim_args['slm_size'])
 
 
@@ -561,26 +563,7 @@ if __name__ == '__main__':
         )
         plt.show()
 
-
-
-        p_weights = np.zeros(49)
-        # p_indicies = [8, 9, 11, 12, 15, 16, 18, 19, 29, 33, 37, 38, 39, ]
-        p_indicies = [2, 4, 9, 11, 16, 17, 18, 29, 31, 33, 36, 38, 40, 43, 44, 45, 46, 47, ]
-        for i in p_indicies:
-            p_weights[i] = 1
-        plot_slice(tf.math.abs(tf.reduce_sum(forward(tf.constant(p_weights)), axis=0)) ** 2, title="");
-        plt.show()
-
-        p_fields = field_generator(p_weights)
-        plot_slice(tf.abs(tf.reduce_sum(p_fields, axis=0)).numpy(), title="")
-        plt.show()
-
-        a = np.zeros(shape=(7, 7))
-        for i in p_indicies:
-            a[i % 7, i // 7] = 1.
-        # plt.imshow(np.transpose(a))
-        plot_slice(np.transpose(a), title="");
-        plt.show()
+ 
 
 
         propagation = forward(weights)
