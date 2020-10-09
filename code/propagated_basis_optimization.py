@@ -1,4 +1,5 @@
 import sys, os
+import logging
 
 sys.path.insert(1, os.path.join(sys.path[-1], 'code'))
 sys.path.insert(1, os.path.join(sys.path[-1], '.'))
@@ -232,44 +233,48 @@ def complex_initializer_random(shape):
 
 @tf.function
 def forward(weights):
-    def prop(x):
+    def prop(x, distance):
         """Propagates fields `prop_distantce`"""
         return ap.propagate_padded(
             propagator=ap.propagate_angular_bw_limited,
-            field=x, k=sim_args['k'], z_list=[sim_args['prop_distance'], ],
+            field=x, k=sim_args['k'], z_list=[distance, ],
             dx=sim_args['dd'],
             dy=sim_args['dd'],
             pad_factor=1.,
         )[0, :, :]
 
-    def lens_f(A, f):
-        """Apply lens phase profile to field with focal length `prop_distance`"""
-        dd = sim_args['dd']
-        slm_size = sim_args['slm_size']
-        k = sim_args['k']
+    def prop_1d_to_ms1(weights):
+        return prop(weights, sim_args['spacing_1d_to_ms1'])
 
-        x = tf.linspace(-dd * slm_size / 2., dd * slm_size / 2., slm_size)
-        y = tf.linspace(-dd * slm_size / 2., dd * slm_size / 2., slm_size)
-        Y, X = tf.meshgrid(y, x, indexing='xy')
+    def prop_ms1_to_ms2(weights):
+        return prop(weights, sim_args['spacing_ms1_to_ms2'])
 
-        Y = tf.cast(Y, dtype=dtype['real'])
-        X = tf.cast(X, dtype=dtype['real'])
+    def prop_ms1_to_detector(weights):
+        return prop(weights, sim_args['spacing_ms2_to_detector'])
 
-        phi = -k * tf.sqrt(f ** 2 + X ** 2 + Y ** 2)
-        field = tf.complex(tf.cos(phi), tf.sin(phi))
-        lensed_field = tf.complex(
-            *complex_mul(
-                *split_complex(A),
-                *split_complex(field),
-            )
-        )
-        return lensed_field
 
-    def lens_full(A):
-        return lens_f(A, sim_args['prop_distance'])
-
-    def lens_half(A):
-        return lens_f(A, sim_args['prop_distance'] / 2.)
+    # def lens_f(A, f):
+    #     """Apply lens phase profile to field with focal length `prop_distance`"""
+    #     dd = sim_args['dd']
+    #     slm_size = sim_args['slm_size']
+    #     k = sim_args['k']
+    #
+    #     x = tf.linspace(-dd * slm_size / 2., dd * slm_size / 2., slm_size)
+    #     y = tf.linspace(-dd * slm_size / 2., dd * slm_size / 2., slm_size)
+    #     Y, X = tf.meshgrid(y, x, indexing='xy')
+    #
+    #     Y = tf.cast(Y, dtype=dtype['real'])
+    #     X = tf.cast(X, dtype=dtype['real'])
+    #
+    #     phi = -k * tf.sqrt(f ** 2 + X ** 2 + Y ** 2)
+    #     field = tf.complex(tf.cos(phi), tf.sin(phi))
+    #     lensed_field = tf.complex(
+    #         *complex_mul(
+    #             *split_complex(A),
+    #             *split_complex(field),
+    #         )
+    #     )
+    #     return lensed_field
 
     def meta1(A):
         # field_after = tf.complex(
@@ -303,16 +308,16 @@ def forward(weights):
 
     field_set = field_generator(weights)
 
-    field_set = tf.map_fn(fn=prop, elems=field_set)
+    field_set = tf.map_fn(fn=prop_1d_to_ms1, elems=field_set)
     # field_set = tf.map_fn(fn=lens_full, elems=field_set)
     #field_set = tf.map_fn(fn=prop, elems=field_set)
 
     field_set = tf.map_fn(fn=meta1, elems=field_set)
 
-    field_set = tf.map_fn(fn=prop, elems=field_set)
+    field_set = tf.map_fn(fn=prop_ms1_to_ms2, elems=field_set)
     field_set = tf.map_fn(fn=meta2, elems=field_set)
     # field_set = tf.map_fn(fn=lens_full, elems=field_set)
-    field_set = tf.map_fn(fn=prop, elems=field_set)
+    field_set = tf.map_fn(fn=prop_ms1_to_detector, elems=field_set)
     return field_set
 
 
@@ -446,30 +451,33 @@ if __name__ == '__main__':
     sim_args = {
         'wavelength': 633e-9,  # HeNe
         # 'slm_size': 473,  # defines a simulation region of `slm_size` by `slm_size`
-        'slm_size': 262,  # defines a simulation region of `slm_size` by `slm_size`
-
+        'slm_size': 999,  # defines a simulation region of `slm_size` by `slm_size`
     }
 
     sim_args = {
         **sim_args,
-        'lens_aperture': 250. * sim_args['wavelength'],
+        'lens_aperture': 100e-6,
     }
 
     sim_args = {
         **sim_args,
         **{
             'k': 2. * np.pi / sim_args['wavelength'],
-            'prop_distance': 500. * sim_args['wavelength'],
+
+            'spacing_1d_to_ms1': sim_args['lens_aperture']/sim_args['wavelength']*8e-6, #NA so d_min is lambda
+            'spacing_ms1_to_ms2': 1.5 * 0.5e-3, # thickness of glass substrate
+            'spacing_ms2_to_detector': 20e-3,
+
 
             'slm_shape': (sim_args['slm_size'], sim_args['slm_size'],),
             'dd': sim_args['lens_aperture'] / sim_args['slm_size'],  # array element spacing
             # allows `filter_height` * `filter_width` number of orthogonal modes through
             # 'filter_height': 7,
             # 'filter_width': 7,
-            'n_i_bins': 7,
-            'n_j_bins': 7,
+            'n_i_bins': 2,
+            'n_j_bins': 2,
 
-            'n_modes': 49,
+            'n_modes': 4,
         }
     }
 
@@ -478,17 +486,27 @@ if __name__ == '__main__':
     # weighs is a constant TODO: Make constants
     weights = tf.Variable(tf.ones(sim_args['n_modes'], dtype=dtype['comp']))
 
-    slm_args = {'n_weights': sim_args['n_modes'], 'pixel_width': 20, 'pixel_height': 1, 'pixel_spacing': 127,
-                 'dtype': dtype['comp']}
+    approx_pixel_size = 8e-6
+    element_size = sim_args['lens_aperture']/sim_args['slm_size']
+
+    slm_args = {
+        'n_weights': sim_args['n_modes'],
+        'pixel_width': approx_pixel_size//element_size,
+        'pixel_height': approx_pixel_size//element_size,
+        'pixel_spacing': 5,
+        'dtype': dtype['comp']}
     slm_args['end_spacing'] = (sim_args['slm_size'] - (
-            sim_args['n_modes']*slm_args['pixel_height'] + (sim_args['n_modes'] - 1 )*slm_args['pixel_spacing']
+            sim_args['n_modes']*slm_args['pixel_height'] + (sim_args['n_modes'] - 1) * slm_args['pixel_spacing']
     )) // 2
 
+
+    logging.warning(slm_args)
+    logging.warning(sim_args)
 
     field_generator = oneD_slm_field_generator.OneDPhasorField(**slm_args)
 
     # Make sure that this input modes shape match the simulation shape
-    assert oneD_slm_field_generator.n == sim_args['slm_size'], "SLM field and simulation field mismatch. Adjust the 1D Slm structure. ({} " \
+    assert field_generator.n == sim_args['slm_size'], "SLM field and simulation field mismatch. Adjust the 1D Slm structure. ({} " \
                                          "vs {})".format(field_generator.n, sim_args['slm_size'])
 
 
@@ -535,7 +553,7 @@ if __name__ == '__main__':
     metasurface2_real, metasurface2_imag = tf.math.cos(metasurface2_phase), tf.math.sin(metasurface2_phase)
 
 
-    plotting=False
+    plotting=True
     if plotting:
         # Simulation complete. Now plotting results.
         fields = field_generator(weights)
@@ -546,10 +564,10 @@ if __name__ == '__main__':
         plt.show()
 
         plot_slice(np.angle(metasurface1_real.numpy() + 1j * metasurface1_imag.numpy()), "Optimized metasurface 1 phase")
-        plot_slice(np.abs(metasurface1_real.numpy() + 1j * metasurface1_imag.numpy()), "Optimized metasurface 1 magnitude")
+        # plot_slice(np.abs(metasurface1_real.numpy() + 1j * metasurface1_imag.numpy()), "Optimized metasurface 1 magnitude")
 
         plot_slice(np.angle(metasurface2_real.numpy() + 1j * metasurface2_imag.numpy()), "Optimized metasurface 2 phase")
-        plot_slice(np.abs(metasurface2_real.numpy() + 1j * metasurface2_imag.numpy()), "Optimized metasurface 2 magnitude")
+        # plot_slice(np.abs(metasurface2_real.numpy() + 1j * metasurface2_imag.numpy()), "Optimized metasurface 2 magnitude")
 
         plot_modes(forward(weights).numpy(), 5)
         plt.show()
