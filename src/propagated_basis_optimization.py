@@ -1,64 +1,20 @@
-import sys, os
 import logging
-
-sys.path.insert(1, os.path.join(sys.path[-1], 'code'))
-sys.path.insert(1, os.path.join(sys.path[-1], '.'))
-# import code.oneD_slm_field_generator
-import oneD_slm_field_generator
-
+import os
 import pickle
-
-from AngularPropagateTensorflow import AngularPropagateTensorflow as ap
-import tensorflow as tf
-import numpy as np
-
-
-
-
-import matplotlib.pyplot as plt
-from typing import Generator, List, Tuple
 import time
 
+from typing import List, Tuple
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+import src.oneD_slm_field_generator as oneD_slm_field_generator
+from src.tools import split_complex, complex_mul, triangular_indices, strictly_triangular_indices
+from AngularPropagateTensorflow import AngularPropagateTensorflow as ap
+
+import tensorflow as tf
+
 # tf.debugging.set_log_device_placement(True)
-
-def strictly_triangular_indices(size: int) -> List[Tuple[int, int]]:
-    """Returns a list of tuples that contain the indices of strictly non-zero elements of a _strictly_ triangular matrix
-    of dimension `size` x `size` """
-
-    indices = []
-    i = 0
-    while i < size:
-        j = 0
-        while j < i:
-            indices.append((i, j))
-            j += 1
-        i += 1
-    return indices
-
-
-def triangular_indices(size: int) -> List[Tuple[int, int]]:
-    """Returns a list of tuples that contain the indices of strictly non-zero elements of a triangular matrix
-    of dimension `size` x `size` """
-    indices = []
-    i = 0
-    while i < size:
-        j = 0
-        while j <= i:  # `<=` to include diagonal elements
-            indices.append((i, j))
-            j += 1
-        i += 1
-    return indices
-
-
-# split complex tensor into real and imaginary parts
-split_complex = lambda c: (tf.math.real(c), tf.math.imag(c))
-
-# element-wise multiply complex tensors `m1` and `m2`
-complex_mul = lambda m1_real, m1_imag, m2_real, m2_imag: (
-    m1_real * m2_real - m1_imag * m2_imag,
-    m1_real * m2_imag + m1_imag * m2_real,
-)
-
 
 def correlation(m1, m2):
     """
@@ -160,11 +116,11 @@ def nearest_rectangle(a: int) -> Tuple[int, int]:
     return min(factor_pair), max(factor_pair)
 
 
-def plot_modes(set, scale=1.):
+def plot_modes(set, scale=1., **kwargs):
     set = np.abs(set)
     n_modes = set.shape[0]
     plot_shape = nearest_rectangle(n_modes)
-    fig, axs = plt.subplots(*plot_shape, figsize=(scale*plot_shape[0], scale*plot_shape[1]))
+    fig, axs = plt.subplots(*plot_shape, figsize=(scale*plot_shape[0], scale*plot_shape[1]), **kwargs)
     vmax = np.max(set)
     vmin = min(np.min(set), 0.)
     for i in range(n_modes):
@@ -172,7 +128,7 @@ def plot_modes(set, scale=1.):
         im = ax.imshow(set[i, :, :], vmin=vmin, vmax=vmax)
         plt.axis('off')
         ax.axis('off')
-        #fig.colorbar(im, cax=ax)
+        # fig.colorbar(im, cax=ax)
     plt.tight_layout()
 
 
@@ -188,16 +144,25 @@ def plot_modes_fft(set):
     plot_modes(fft)
 
 
-def plot_slice(image, title):
+def plot_slice(image, title, sim_args):
     f = plt.figure()
     half_w = sim_args['lens_aperture'] / 2. / 1e-6
-    plt.imshow(image,
-               extent=[-half_w, half_w, -half_w, half_w])
+    plt.imshow(
+        image,
+        extent=[-half_w, half_w, -half_w, half_w],
+        interpolation='none'
+    )
+
+    ###
+    # plt.pcolormesh(image)
+    # ax = plt.gca()
+    # # ax.pcolorfast(image)
+    # ax.set_aspect('equal')
+    ###
+
     plt.xlabel(r'x ($\mu m$)')
     plt.ylabel(r'y ($\mu m$)')
     plt.title(title)
-    #plt.colorbar()
-    plt.show()
 
 
 def apply_low_pass_filter(basis_set_real, basis_set_imag, pad_x, pad_y):
@@ -232,7 +197,7 @@ def complex_initializer_random(shape):
 
 
 @tf.function
-def forward(weights):
+def forward(weights, field_generator, sim_args, metasurface1_phase, metasurface2_phase):
     def prop(x, distance):
         """Propagates fields `prop_distantce`"""
         return ap.propagate_padded(
@@ -322,9 +287,9 @@ def forward(weights):
 
 
 # @tf.function
-def loss_orthogonal():
+def loss_orthogonal(field_generator, metasurface1_phase, metasurface2_phase):
     """Loss function to maximize orthogonality between output modes...TODO: Add docs."""
-    propagated_fields = forward(weights)
+    propagated_fields = forward(weights, field_generator, sim_args, metasurface1_phase, metasurface2_phase)
     propagated_fields_real, propagated_fields_imag = split_complex(propagated_fields)
 
     slm_size = sim_args['slm_size']
@@ -351,9 +316,11 @@ def loss_orthogonal():
     # return mode_overlap #- total_energy
 
 
-def loss_binned():
+def loss_binned(weights, field_generator, sim_args, metasurface1_phase, metasurface2_phase):
     """Loss function to map power from each input mode to a bin in the output field"""
-    propagated_fields = forward(weights)
+    propagated_fields = forward(
+        weights, field_generator, sim_args, metasurface1_phase, metasurface2_phase
+    )
     propagated_intensities = tf.math.abs(propagated_fields) ** 2
     n_i_bins = sim_args['n_i_bins']
     n_j_bins = sim_args['n_j_bins']
@@ -387,16 +354,15 @@ def loss_binned():
 
 
 # @tf.function
-def train_step():
+def train_step(metasurface1_phase, metasurface2_phase, weights, field_generator, sim_args, optimizer):
     # Variables to be trained
-    #train_vars = [metasurface1_real, metasurface1_imag, metasurface2_real, metasurface2_imag, ]
-    train_vars = [metasurface1_phase, metasurface2_phase, ]
-
+    train_vars = [metasurface1_phase, metasurface2_phase, ] #  [metasurface1_real, metasurface1_imag, metasurface2_real, metasurface2_imag, ]
     with tf.GradientTape() as tape:
         # current_loss = orthogonal_loss()
-        current_loss = loss_binned()
+        current_loss = loss_binned(
+            weights, field_generator, sim_args, metasurface1_phase, metasurface2_phase
+        )
     grads = tape.gradient(target=current_loss, sources=train_vars)
-
     # update weights
     optimizer.apply_gradients(zip(grads, train_vars))
 
@@ -451,12 +417,12 @@ if __name__ == '__main__':
     sim_args = {
         'wavelength': 633e-9,  # HeNe
         # 'slm_size': 473,  # defines a simulation region of `slm_size` by `slm_size`
-        'slm_size': 999,  # defines a simulation region of `slm_size` by `slm_size`
+        'slm_size': 400,  # defines a simulation region of `slm_size` by `slm_size`
     }
 
     sim_args = {
         **sim_args,
-        'lens_aperture': 100e-6,
+        'lens_aperture': 2e-3,
     }
 
     sim_args = {
@@ -464,8 +430,9 @@ if __name__ == '__main__':
         **{
             'k': 2. * np.pi / sim_args['wavelength'],
 
-            'spacing_1d_to_ms1': sim_args['lens_aperture']/sim_args['wavelength']*8e-6, #NA so d_min is lambda
-            'spacing_ms1_to_ms2': 1.5 * 0.5e-3, # thickness of glass substrate
+            #'spacing_1d_to_ms1': sim_args['lens_aperture']/sim_args['wavelength']*8e-6, #NA so d_min is lambda
+            'spacing_1d_to_ms1': 2e-3,
+            'spacing_ms1_to_ms2': 1.5 * 1e-3, # thickness of glass substrate
             'spacing_ms2_to_detector': 20e-3,
 
 
@@ -474,10 +441,10 @@ if __name__ == '__main__':
             # allows `filter_height` * `filter_width` number of orthogonal modes through
             # 'filter_height': 7,
             # 'filter_width': 7,
-            'n_i_bins': 2,
-            'n_j_bins': 2,
+            'n_i_bins': 7,
+            'n_j_bins': 7,
 
-            'n_modes': 4,
+            'n_modes': 49,
         }
     }
 
@@ -486,19 +453,18 @@ if __name__ == '__main__':
     # weighs is a constant TODO: Make constants
     weights = tf.Variable(tf.ones(sim_args['n_modes'], dtype=dtype['comp']))
 
-    approx_pixel_size = 8e-6
-    element_size = sim_args['lens_aperture']/sim_args['slm_size']
 
     slm_args = {
         'n_weights': sim_args['n_modes'],
-        'pixel_width': approx_pixel_size//element_size,
-        'pixel_height': approx_pixel_size//element_size,
+        'pixel_width': 2,
+        'pixel_height': 2,
         'pixel_spacing': 5,
         'dtype': dtype['comp']}
     slm_args['end_spacing'] = (sim_args['slm_size'] - (
             sim_args['n_modes']*slm_args['pixel_height'] + (sim_args['n_modes'] - 1) * slm_args['pixel_spacing']
     )) // 2
 
+    assert slm_args['end_spacing'] >= 0, "Bounds error"
 
     logging.warning(slm_args)
     logging.warning(sim_args)
@@ -543,7 +509,9 @@ if __name__ == '__main__':
     # Training loop
     t = time.time()
     for i in range(iterations):
-        error = train_step()
+        error = train_step(
+            metasurface1_phase, metasurface2_phase, weights, field_generator, sim_args, optimizer
+        )
         if i % n_update == 0:
             t_now = time.time()
             print("Error: {}\tTimePerUpdate(s): {}\t {}/{}".format(error, t_now - t, i + 1, iterations))
@@ -555,39 +523,117 @@ if __name__ == '__main__':
 
     plotting=True
     if plotting:
+        figure_dir = os.path.join("..", "figures")
+        assert os.path.isdir(figure_dir), "Folder '{}' doesn't exist".format(figure_dir)
+
+        # Phase plot should use a cyclic color map: ['twilight', 'twilight_shifted', 'hsv']
+
+
         # Simulation complete. Now plotting results.
         fields = field_generator(weights)
-        plot_slice(tf.abs(tf.reduce_sum(fields, axis=0)).numpy(), title="")
+        plot_slice(
+            tf.abs(tf.reduce_sum(fields, axis=0)).numpy(),
+            title="",
+            sim_args=sim_args
+        )
+        plt.colorbar()
+        plt.set_cmap('magma')
+        plt.savefig(os.path.join(figure_dir, "input_SLM.pdf"), format='pdf', dpi=1000)
+        plt.show()
+        #
+        # # plot individual incoming modes
+        # plot_modes(fields, 5)
+        # plt.set_cmap('jet')
+        # plt.savefig(os.path.join(figure_dir, "incoming_modes.pdf"), format='pdf', dpi=1000)
+        # plt.show()
+
+        # plot ms1 phase
+        plot_slice(
+            np.angle(metasurface1_real.numpy() + 1j * metasurface1_imag.numpy()),
+            "",
+            sim_args,
+        )
+        plt.set_cmap('twilight')
+        plt.colorbar()
+        plt.savefig(os.path.join(figure_dir, "ms1.pdf"), format='pdf', dpi=1000)
         plt.show()
 
-        plot_modes(fields, 5)
+        # plot ms2 phase
+        plot_slice(
+            np.angle(metasurface2_real.numpy() + 1j * metasurface2_imag.numpy()),
+            "",
+            sim_args,
+        )
+        plt.set_cmap('twilight')
+        plt.colorbar()
+        plt.savefig(os.path.join(figure_dir, "ms2.pdf"), format='pdf', dpi=1000)
         plt.show()
 
-        plot_slice(np.angle(metasurface1_real.numpy() + 1j * metasurface1_imag.numpy()), "Optimized metasurface 1 phase")
-        # plot_slice(np.abs(metasurface1_real.numpy() + 1j * metasurface1_imag.numpy()), "Optimized metasurface 1 magnitude")
-
-        plot_slice(np.angle(metasurface2_real.numpy() + 1j * metasurface2_imag.numpy()), "Optimized metasurface 2 phase")
-        # plot_slice(np.abs(metasurface2_real.numpy() + 1j * metasurface2_imag.numpy()), "Optimized metasurface 2 magnitude")
-
-        plot_modes(forward(weights).numpy(), 5)
+        plot_modes(forward(
+            weights, field_generator, sim_args, metasurface1_phase, metasurface2_phase
+        ).numpy(), 5)
+        plt.set_cmap('magma')
+        plt.savefig(os.path.join(figure_dir, "propagated_modes.pdf"), format='pdf', dpi=1000)
         plt.show()
+        plt.set_cmap('magma')
 
-        # plot_modes_fft(forward(weights))
+        # plot_modes_fft(forward(
+        #   weights, field_generator, sim_args, metasurface1_phase, metasurface2_phase
+        # ))
         # plt.show()
 
         # plot abs correlation matrix
         plt.figure()
         plt.imshow(
             np.abs(
-                correlation_matrix(forward(weights))
+                correlation_matrix(forward(
+                    weights, field_generator, sim_args, metasurface1_phase, metasurface2_phase
+                ))
             )
         )
+        plt.savefig(os.path.join(figure_dir, "correlation.pdf"), format='pdf', dpi=1000)
+        plt.colorbar()
         plt.show()
 
- 
+        p_weights = np.zeros(49)
+        # p_indicies = [8, 9, 11, 12, 15, 16, 18, 19, 29, 33, 37, 38, 39, ]
+        p_indicies = [2, 4, 9, 11, 16, 17, 18, 29, 31, 33, 36, 38, 40, 43, 44, 45, 46, 47, ]
+        for i in p_indicies:
+            p_weights[i] = 1
+        plot_slice(
+            tf.math.abs(tf.reduce_sum(forward(
+                tf.constant(p_weights), field_generator, sim_args, metasurface1_phase, metasurface2_phase
+            ), axis=0)) ** 2,
+            title="",
+            sim_args=sim_args
+        )
+        plt.savefig(os.path.join(figure_dir, "uw_input.pdf"), format='pdf', dpi=1000)
+        plt.show()
+        p_fields = field_generator(p_weights)
+        plot_slice(
+            tf.abs(tf.reduce_sum(p_fields, axis=0)).numpy(),
+            title="",
+            sim_args=sim_args,
+        )
+        plt.savefig(os.path.join(figure_dir, "uw_propagated.pdf"), format='pdf', dpi=1000)
+        plt.show()
+        a = np.zeros(shape=(7, 7))
+        for i in p_indicies:
+            a[i % 7, i // 7] = 1.
+        # plt.imshow(np.transpose(a))
+        plot_slice(
+            np.transpose(a),
+            title="",
+            sim_args=sim_args,
+        )
+        plt.colorbar()
+        plt.savefig(os.path.join(figure_dir, "uw_target.pdf"), format='pdf', dpi=1000)
+        plt.show()
 
 
-        propagation = forward(weights)
+        propagation = forward(
+            weights, field_generator, sim_args, metasurface1_phase, metasurface2_phase
+        )
         # filtered_prop_fields = tf.complex(
         #     *apply_low_pass_filter(
         #         *split_complex(propagation),
@@ -620,7 +666,9 @@ if __name__ == '__main__':
             'real2': metasurface2_real,
             'imag2': metasurface2_imag,
         },
-        'forward': forward(weights).numpy(),
+        'forward': forward(
+            weights, field_generator, sim_args, metasurface1_phase, metasurface2_phase
+        ).numpy(),
         # 'forward_filtered': filtered_prop_fields.numpy(),
         'weights': weights.numpy(),
         'inputs_modes': field_generator(weights).numpy(),

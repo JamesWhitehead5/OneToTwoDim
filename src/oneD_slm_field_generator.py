@@ -1,7 +1,7 @@
+from src.tools import split_complex, complex_mul
 import tensorflow as tf
-import numpy as np
+
 import matplotlib.pyplot as plt
-from propagated_basis_optimization import complex_mul, split_complex
 
 class OneDPhasorField(tf.Module):
     def __init__(self, n_weights, pixel_width, pixel_height, pixel_spacing, end_spacing, dtype):

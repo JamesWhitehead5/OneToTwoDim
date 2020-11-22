@@ -1,12 +1,6 @@
-
-
-
 import tensorflow as tf
 import numpy as np
-
 import matplotlib.pyplot as plt
-from typing import Generator, List, Tuple
-import time
 
 
 def upper_triangular_indicies(size):

@@ -4,7 +4,7 @@ import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 # from propagated_basis_optimization import
-from code.propagated_basis_optimization import complex_initializer_random, complex_mul, split_complex, plot_modes
+from src.propagated_basis_optimization import complex_initializer_random, complex_mul, split_complex, plot_modes
 
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
@@ -78,7 +78,7 @@ def generate_fourier_modes(slm_size):
 
 def load_composed_modes():
     import pickle
-    data = pickle.load(open("../code/data/two_ms.p", "rb"))
+    data = pickle.load(open("../src/data/two_ms.p", "rb"))
     # return tf.transpose(data['forward'], perm=(1, 2, 0))
     return tf.transpose(data['forward'], perm=(1, 2, 0))
 
@@ -180,4 +180,4 @@ if __name__=='__main__':
     m = np.max(frames)
     frames = [np.array([frame, frame, frame])/m*255 for frame in frames]
     from array2gif import write_gif
-    write_gif(frames, '../code/data/opt.gif', fps=10)
+    write_gif(frames, '../src/data/opt.gif', fps=10)
