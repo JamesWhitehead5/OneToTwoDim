@@ -422,7 +422,7 @@ if __name__ == '__main__':
 
     sim_args = {
         **sim_args,
-        'lens_aperture': 2e-3,
+        'lens_aperture': 2.0e-3,
     }
 
     sim_args = {
@@ -431,7 +431,7 @@ if __name__ == '__main__':
             'k': 2. * np.pi / sim_args['wavelength'],
 
             #'spacing_1d_to_ms1': sim_args['lens_aperture']/sim_args['wavelength']*8e-6, #NA so d_min is lambda
-            'spacing_1d_to_ms1': 2e-3,
+            'spacing_1d_to_ms1': 2.0e-3,
             'spacing_ms1_to_ms2': 1.5 * 1e-3, # thickness of glass substrate
             'spacing_ms2_to_detector': 20e-3,
 

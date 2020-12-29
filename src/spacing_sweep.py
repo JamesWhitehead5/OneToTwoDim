@@ -1,3 +1,7 @@
+# sweeps the input pixel spacing for the 4 to 2x2 transform while all other simulation variables
+# are the same
+
+
 from src.propagated_basis_optimization import *
 
 
@@ -17,12 +21,12 @@ def run_sim(spacing):
     sim_args = {
         'wavelength': 633e-9,  # HeNe
         # 'slm_size': 473,  # defines a simulation region of `slm_size` by `slm_size`
-        'slm_size': 401,  # defines a simulation region of `slm_size` by `slm_size`
+        'slm_size': 400 + spacing%2,  # defines a simulation region of `slm_size` by `slm_size`
     }
 
     sim_args = {
         **sim_args,
-        'lens_aperture': 2e-3,
+        'lens_aperture': 2.0e-3,
     }
 
     sim_args = {
@@ -198,16 +202,25 @@ def run_sim(spacing):
 
 
 if __name__ == '__main__':
+    from pathlib import Path
+    path_root = Path(__file__).parent.parent
+
     correlation_mat = []
-    for spacing in range(1, 101, 2):
+    for spacing in range(1, 21, 6):
         correlation_mat.append((spacing, run_sim(spacing)))
 
     print(correlation_mat)
 
-    pickle.dump(correlation_mat, open("pitch_sweep.p", "wb"))
-    # data = pickle.load(open("pitch_sweep.p", "rb"))
+    pickle.dump(correlation_mat, open(os.path.join(path_root, "src/data/pitch_sweep.p"), "wb"))
 
 
+
+    import pickle
+    import numpy as np
+    data = pickle.load(open(os.path.join(path_root, "src/data/pitch_sweep.p"), "rb"))
+    from src.tools import strictly_triangular_indices
+    import matplotlib.pyplot as plt
+    import scipy.optimize
 
     def cross_corr(mat):
         n = np.shape(mat)[0]
@@ -219,11 +232,25 @@ if __name__ == '__main__':
         return cross
 
 
-    spacings = []
+    pitches = []
     sum_cross_coors = []
-    for (spacing, mat) in correlation_mat:
-        spacings.append(spacing)
+    for (spacing, mat) in data:
+        pitch = (2 + spacing)*2.0e-3/400*1e6
+        pitches.append(pitch)
         sum_cross_coors.append(cross_corr(mat))
 
-    plt.scatter(spacings, sum_cross_coors)
+    def func(x, a, b, c):
+        return c + a/x + b/x*2
+        # return a/((x-b)**2 + c)
+    popt, pcov = scipy.optimize.curve_fit(func, pitches, sum_cross_coors)
+    x_min, x_max = np.min(pitches), np.max(pitches)
+    x = np.linspace(x_min, x_max, 100)
+    plt.plot(x, func(x, *popt))
+
+    plt.scatter(pitches, sum_cross_coors, marker='x')
+    plt.xlabel(r'Pixel pitch ($\mu m$)')
+    plt.ylabel("Cumulative crosstalk (arb. unit)")
+    plt.xlim([0, np.max(pitches)*1.1])
+    plt.ylim([0, np.max(sum_cross_coors)*1.1])
+    plt.savefig(os.path.join(path_root, "figures/sum_of_crosstalk.pdf"), format='pdf', dpi=1000)
     plt.show()
